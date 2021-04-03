@@ -1,0 +1,170 @@
+version: '3'
+services:
+    grafana:
+        image: grafana/grafana:7.3.6
+        container_name: grafana
+        hostname: grafana
+        networks:
+            dc1ring:
+                ipv4_address: 172.30.0.5
+        expose:
+            - 3000
+        ports:
+            - 3000:3000
+    jenkins:
+        image: jenkins/jenkins:latest
+        container_name: jenkins
+        hostname: jenkins
+        networks:
+            dc1ring:
+                ipv4_address: 172.30.0.6
+        expose:
+            - 8080
+        ports:
+            - 8080:8080
+        volumes:
+            - ./jenkins_home:/var/jenkins_home
+        environment:
+            - JENKINS_USER=admin
+            - JENKINS_PASS=8aec19a8773b4db6b90c47b5dfc0b90d
+    candles-5min-scheduler:
+        image: py-scheduler
+        container_name: candles-5min-scheduler
+        hostname: candles-5min-scheduler
+        # entrypoint: /bin/bash
+        # command: ["cron", "-f"]
+        # volumes:
+        #     - data:/app-data
+        networks:
+            dc1ring:
+                ipv4_address: 172.30.0.8
+        expose:
+            - 8082
+        ports:
+            - 8082:8082
+    node1:
+        # The first node and config in the first datacenter.
+        # Datastax image for Cassandra version 3.x is pulled
+        # from the docker within ING of public store.
+        image: datastax/dse-server:6.0.8
+        # external via guest wifi
+        # image: datastax/dse-server:6.0.8
+        container_name: DSE-6_node1
+        hostname: node1
+        # use static ip address
+        networks:
+            dc1ring:
+                ipv4_address: 172.30.0.2
+        # Maps cassandra exercises to a local folder.
+        # This preserves data across container restarts.
+        volumes:
+            - ./musicdb:/opt/dse/musicdb
+            - ./../cassandra-seed-data:/etc/cassandra-seed-data
+        # Docker container environment variable. We are using the
+        # CASSANDRA_CLUSTER_NAME to name the cluster. This needs to be the same
+        # across clusters. We are also declaring that node1 is a seed node etc.
+        # https://hub.docker.com/_/datastax
+        environment:
+            - DS_LICENSE=accept
+            - SEEDS=node1
+            - START_RPC=false
+            - CLUSTER_NAME=dse51_cluster
+            - NUM_TOKENS=3
+            - DC=DC1
+            - RACK=RAC1
+            - MAX_HEAP_SIZE=1000000000
+            - write_request_timeout_in_ms=20000
+        # Exposing ports for inter cluster communication
+        expose:
+            # Intra-node communication
+            - 7000
+            # TLS intra-node communication
+            - 7001
+            # JMX
+            - 7199
+            # CQL
+            - 9042
+            # CQL SSL
+            - 9142
+        ports:
+            - 9042:9042
+        ulimits:
+            memlock: -1
+            nproc: 32768
+            nofile: 100000
+    node2:
+        image: datastax/dse-server:6.0.8
+        # external via guest wifi
+        # image: datastax/dse-server:6.0.8
+        container_name: DSE-6_node2
+        hostname: node2
+        networks:
+            dc1ring:
+                ipv4_address: 172.30.0.3
+        volumes:
+            - ./musicdb:/opt/dse/musicdb
+        environment:
+            - DS_LICENSE=accept
+            - SEEDS=node1
+            - START_RPC=false
+            - CLUSTER_NAME=dse51_cluster
+            - NUM_TOKENS=3
+            - DC=DC2
+            - RACK=RAC1
+            - MAX_HEAP_SIZE=1000000000
+        expose:
+            - 7000
+            - 7001
+            - 7199
+            - 9042
+            - 9142
+        ports:
+            - 9043:9042
+        ulimits:
+            memlock: -1
+            nproc: 32768
+            nofile: 100000
+        depends_on:
+            - node1
+    node3:
+        image: datastax/dse-server:6.0.8
+        # external via guest wifi
+        # image: datastax/dse-server:6.0.8
+        container_name: DSE-6_node3
+        hostname: node3
+        networks:
+            dc1ring:
+                ipv4_address: 172.30.0.4
+        volumes:
+            - ./musicdb:/opt/dse/musicdb
+        environment:
+            - DS_LICENSE=accept
+            - SEEDS=node1
+            - START_RPC=false
+            - CLUSTER_NAME=dse51_cluster
+            - NUM_TOKENS=3
+            - DC=DC1
+            - RACK=RAC1
+            - MAX_HEAP_SIZE=1000000000
+        expose:
+            - 7000
+            - 7001
+            - 7199
+            - 9042
+            - 9142
+        ports:
+            - 9044:9042
+        ulimits:
+            memlock: -1
+            nproc: 32768
+            nofile: 100000
+        depends_on:
+            - node1
+volumes:
+    data:
+networks:
+    dc1ring:
+        ipam:
+            driver: default
+            config:
+                - subnet: 172.30.0.0/16

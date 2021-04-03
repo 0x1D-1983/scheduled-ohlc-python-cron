@@ -1,0 +1,1 @@
+* * * * * /usr/local/bin/python /usr/src/app/candles-sync-5m.py >> /var/log/cron.log 2>&1
